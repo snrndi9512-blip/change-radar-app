@@ -1,0 +1,499 @@
+<!-- ★ charset 선언은 파일 맨 앞에 있어야 한다 (브라우저는 앞 1024 바이트만 훑는다).
+     이게 없으면 텔레그램으로 받은 파일을 열 때 브라우저가 인코딩을 추측하다
+     한글 UTF-8 바이트를 중국어 코드페이지로 잘못 읽어 글자가 전부 깨진다.
+     viewport 가 없으면 휴대폰에서 데스크톱 폭으로 나와 글씨가 아주 작아진다. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- GitHub Pages 는 HTML 을 10분간 캐시하라는 헤더를 보내고 휴대폰 브라우저는
+     그보다 더 오래 붙든다. 갱신했는데 옛 화면이 보이는 일을 줄인다. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>변화감지 브리핑</title>
+<style>
+  /* prototype/change-radar.html 의 디자인을 그대로 이어받는다.
+     한국 증시 관례: 상승=빨강, 하락=파랑. 다크 단일 테마이므로
+     모든 색을 명시적으로 칠해 뷰어 테마에 영향받지 않게 한다. */
+  :root{
+    --bg:#0f1115; --card:#181b22; --card2:#1e222b; --line:#272b34;
+    --txt:#e8ebf0; --sub:#9aa3b2; --dim:#6b7382;
+    --up:#f0616d; --down:#4d8dff; --flat:#8a92a3;
+    --good:#28c286; --bad:#f0616d; --warn:#f5a623;
+    --accent:#6c8cff; --accent2:#9d7bff;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{
+    margin:0; padding:0; background:#05060a; color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",
+                "Malgun Gothic","Segoe UI",sans-serif;
+  }
+  .wrap{max-width:430px; margin:0 auto; min-height:100vh; background:var(--bg);
+        box-shadow:0 0 60px rgba(0,0,0,.6); padding-bottom:34px}
+
+  .top{padding:14px 18px 8px; display:flex; align-items:center; justify-content:space-between}
+  .brand{display:flex; align-items:center; gap:9px; font-weight:800; font-size:18px;
+         letter-spacing:-.3px}
+  .logo{width:26px; height:26px; border-radius:8px;
+        background:linear-gradient(135deg,var(--accent),var(--accent2));
+        display:flex; align-items:center; justify-content:center; font-size:14px}
+  .stamp{font-size:10.5px; color:var(--dim); font-weight:600; text-align:right; line-height:1.4}
+  .disc{margin:2px 18px 10px; font-size:11px; color:var(--dim); background:var(--card);
+        border:1px solid var(--line); padding:7px 10px; border-radius:9px; line-height:1.45}
+  .screen{padding:0 18px 20px}
+  h2.sec{font-size:13px; color:var(--sub); margin:20px 2px 10px; font-weight:700;
+         letter-spacing:.2px; display:flex; align-items:center; gap:7px}
+  .pill{font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px;
+        background:var(--card2); color:var(--sub)}
+
+  /* 브리핑 히어로 */
+  .hero{background:linear-gradient(150deg,#1c2130,#181b22); border:1px solid var(--line);
+        border-radius:18px; padding:16px 16px 14px; position:relative; overflow:hidden}
+  .hero .glow{position:absolute; top:-40px; right:-30px; width:120px; height:120px;
+              background:radial-gradient(circle,rgba(108,140,255,.35),transparent 70%)}
+  .hero .lbl{font-size:12px; color:var(--sub); font-weight:600}
+  .hero .big{font-size:20px; font-weight:800; margin:6px 0 3px; letter-spacing:-.4px;
+             line-height:1.3; text-wrap:balance}
+  .hero .sub{font-size:12.5px; color:var(--sub); line-height:1.55}
+  .hero .sub b{color:var(--txt); font-weight:700}
+  .hero .row{display:flex; gap:8px; margin-top:12px}
+  .chip{flex:1; background:rgba(255,255,255,.04); border:1px solid var(--line);
+        border-radius:12px; padding:9px 10px; text-align:center}
+  .chip .n{font-size:17px; font-weight:800}
+  .chip .c{font-size:10.5px; color:var(--dim); margin-top:2px}
+
+  /* 종목 카드 */
+  .card{background:var(--card); border:1px solid var(--line); border-radius:15px;
+        padding:13px 14px; margin-bottom:10px}
+  .srow{display:flex; align-items:center; justify-content:space-between; gap:10px}
+  .sname{font-weight:800; font-size:15.5px; letter-spacing:-.3px}
+  .sticker{font-size:11px; color:var(--dim); margin-left:6px; font-weight:600}
+  .price{text-align:right}
+  .price .p{font-weight:800; font-size:15px}
+  .price .ch{font-size:12px; font-weight:700; margin-top:1px}
+  .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
+  .badges{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+  .bdg{font-size:11px; font-weight:700; padding:4px 9px; border-radius:8px}
+  .bdg.good{background:rgba(40,194,134,.13); color:var(--good)}
+  .bdg.bad{background:rgba(240,97,109,.13); color:var(--bad)}
+  .bdg.neu{background:rgba(138,146,163,.13); color:var(--sub)}
+  .bdg.hot{background:rgba(245,166,35,.14); color:var(--warn)}
+  .oneline{font-size:12.5px; color:var(--sub); margin-top:9px; line-height:1.55;
+           border-top:1px dashed var(--line); padding-top:9px}
+  .oneline b{color:var(--txt); font-weight:700}
+
+  /* 눌러서 여는 카드 */
+  details{margin-bottom:10px}
+  details > summary{list-style:none; cursor:pointer; position:relative}
+  details > summary::-webkit-details-marker{display:none}
+  summary.card{margin-bottom:0; transition:background .12s}
+  summary.card:hover{background:var(--card2)}
+  summary.card:active{transform:scale(.995)}
+  summary.card:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  .chev{display:inline-block; color:var(--dim); font-size:11px; transition:transform .16s;
+        flex-shrink:0}
+  details[open] > summary .chev{transform:rotate(90deg)}
+  .stock-b{padding:2px 0 6px}
+  .more{font-size:11px; color:var(--accent); font-weight:700; margin-top:9px;
+        display:flex; align-items:center; gap:5px}
+  details[open] > summary .more{color:var(--dim)}
+
+  /* 안쪽 접이식 구역 */
+  details.sect{background:var(--card); border:1px solid var(--line); border-radius:13px;
+               margin:8px 0; overflow:hidden}
+  details.sect > summary{padding:12px 14px; font-size:12.5px; font-weight:700;
+                         color:var(--txt); display:flex; align-items:center; gap:8px}
+  details.sect > summary:hover{background:var(--card2)}
+  details.sect[open] > summary{border-bottom:1px solid var(--line)}
+  details.sect .hint{margin-left:auto; font-size:10.5px; color:var(--dim); font-weight:600}
+  .sect-b{padding:10px 12px 12px}
+  .sect-b > .diff, .sect-b > .senti, .sect-b > .inv{margin:0 0 8px; border:none;
+                                                     background:transparent}
+  .sect-b > .diff:last-child, .sect-b > .senti:last-child{margin-bottom:0}
+  .sect-b > .senti{padding:2px}
+
+  /* 오늘 왜 움직였나 */
+  .why{background:linear-gradient(150deg,#211a2e,#181b22); border:1px solid #34294a;
+       border-radius:15px; padding:14px; margin:10px 0 4px}
+  .why .q{font-size:14px; font-weight:800; margin-bottom:8px}
+  .why p{font-size:13px; color:#d4cbe6; line-height:1.65; margin:0}
+  .why .srcs{margin-top:10px; display:flex; gap:6px; flex-wrap:wrap}
+  .why .t{font-size:10.5px; background:rgba(255,255,255,.05); border:1px solid var(--line);
+          padding:3px 8px; border-radius:7px; color:var(--sub)}
+
+  /* 분기 비교표 */
+  .diff{background:var(--card); border:1px solid var(--line); border-radius:15px;
+        overflow:hidden; margin:10px 0}
+  .diff .dh{padding:11px 14px; font-size:12.5px; font-weight:700; color:var(--sub);
+            border-bottom:1px solid var(--line); display:flex; justify-content:space-between;
+            gap:8px}
+  .diff .dh b{color:var(--txt)}
+  .drow{display:grid; grid-template-columns:1fr auto auto; gap:9px; align-items:center;
+        padding:11px 14px; border-bottom:1px solid var(--line)}
+  .drow:last-child{border-bottom:none}
+  .drow .m{font-size:13px; font-weight:600}
+  .drow .vals{font-size:12px; color:var(--dim); text-align:right;
+              font-variant-numeric:tabular-nums}
+  .drow .vals b{color:var(--txt); font-weight:700}
+  .tag{font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:7px; white-space:nowrap}
+  .tag.good{background:rgba(40,194,134,.14); color:var(--good)}
+  .tag.bad{background:rgba(240,97,109,.14); color:var(--bad)}
+  .tag.neu{background:rgba(138,146,163,.14); color:var(--sub)}
+  .dfoot{padding:9px 14px; font-size:10.5px; color:var(--dim); background:rgba(0,0,0,.15);
+         line-height:1.5}
+
+  /* 투자자 기준 대조 */
+  .inv{background:var(--card); border:1px solid var(--line); border-radius:15px;
+       overflow:hidden; margin:10px 0}
+  .inv-h{padding:11px 14px; font-size:12.5px; font-weight:700; border-bottom:1px solid var(--line);
+         display:flex; justify-content:space-between; align-items:center; gap:8px}
+  .inv-h .who{display:flex; align-items:center; gap:7px}
+  .inv-h .src{font-size:10px; color:var(--dim); font-weight:600}
+  .inv-h .cnt{font-size:11px; font-weight:800; padding:3px 8px; border-radius:7px}
+  .inv-row{display:grid; grid-template-columns:16px 1fr auto; gap:9px; align-items:center;
+           padding:10px 14px; border-bottom:1px solid var(--line)}
+  .inv-row:last-of-type{border-bottom:none}
+  .inv-row .mk{font-size:13px; font-weight:800; text-align:center}
+  .inv-row .lb{font-size:12.5px; font-weight:600}
+  .inv-row .wh{font-size:10.5px; color:var(--dim); margin-top:1px; line-height:1.4}
+  .inv-row .vl{font-size:12px; font-weight:700; text-align:right;
+               font-variant-numeric:tabular-nums; white-space:nowrap}
+  .inv-row .vl small{display:block; color:var(--dim); font-weight:600; font-size:10px}
+  .inv-foot{padding:9px 14px; font-size:10.5px; color:var(--dim);
+            background:rgba(0,0,0,.15); line-height:1.55}
+
+  /* 여론 온도계 */
+  .senti{background:var(--card); border:1px solid var(--line); border-radius:15px;
+         padding:14px; margin:10px 0}
+  .senti .sh{font-size:13px; font-weight:700; margin-bottom:14px; display:flex;
+             justify-content:space-between; align-items:center; gap:8px}
+  .senti .sh .delta{font-size:11.5px; font-weight:700}
+  .bar{height:10px; border-radius:6px; position:relative;
+       background:linear-gradient(90deg,var(--down),#3a3f4b 45%,#3a3f4b 55%,var(--up))}
+  .bar .knob{position:absolute; top:-4px; width:18px; height:18px; border-radius:50%;
+             background:#fff; border:3px solid var(--accent); transform:translateX(-50%);
+             box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  .bar .ghost{position:absolute; top:-1px; width:2px; height:12px; border-radius:2px;
+              background:rgba(255,255,255,.45); transform:translateX(-50%)}
+  .scale{display:flex; justify-content:space-between; font-size:10px; color:var(--dim);
+         margin-top:9px}
+  .senti .note{font-size:11px; color:var(--dim); margin-top:8px; line-height:1.5}
+
+  /* 타임라인 */
+  .tl .item{display:flex; gap:11px}
+  .tl .line{display:flex; flex-direction:column; align-items:center}
+  .tl .d{width:11px; height:11px; border-radius:50%; background:var(--accent);
+         margin-top:5px; flex-shrink:0}
+  .tl .d.g{background:var(--good)} .tl .d.b{background:var(--bad)}
+  .tl .d.n{background:var(--flat)} .tl .d.w{background:var(--warn)}
+  .tl .bar2{width:2px; flex:1; background:var(--line); margin:3px 0}
+  .tl .ct{padding-bottom:16px; min-width:0; flex:1}
+  .tl .dt{font-size:11px; color:var(--dim); font-weight:600; display:flex; gap:6px;
+          align-items:center; flex-wrap:wrap}
+  .tl .tx{font-size:13.5px; margin-top:3px; line-height:1.45; font-weight:700}
+  .tl ul{margin:7px 0 0; padding-left:17px; display:flex; flex-direction:column; gap:5px}
+  .tl li{font-size:12.5px; color:var(--sub); line-height:1.55}
+  .tl .ev-why{background:var(--card2); border-radius:9px; padding:9px 11px; margin-top:9px;
+              display:flex; flex-direction:column; gap:7px}
+  .tl .ev-why .h{font-size:10px; font-weight:800; letter-spacing:.08em; color:var(--dim)}
+  .tl .sig{display:flex; gap:8px; align-items:flex-start}
+  .tl .sig .mk{font-size:11px; font-weight:800; line-height:1.5}
+  .tl .sig .bs{font-size:11.5px; font-weight:700}
+  .tl .sig .ft{font-size:12px; color:var(--sub); line-height:1.5}
+  .tl a{font-size:11.5px; color:var(--accent); text-decoration:none; display:inline-block;
+        margin-top:9px}
+  .tl a:hover, .tl a:focus-visible{text-decoration:underline}
+
+  .news{display:flex; flex-direction:column; gap:7px; margin-top:10px}
+  .news a{color:var(--sub); text-decoration:none; font-size:12.5px; line-height:1.5;
+          display:block; padding-left:12px; position:relative}
+  .news a::before{content:""; position:absolute; left:0; top:8px; width:4px; height:4px;
+                  border-radius:50%; background:var(--dim)}
+  .news a:hover, .news a:focus-visible{color:var(--accent)}
+  a:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:4px}
+  .empty{color:var(--dim); font-size:12.5px; padding:12px 2px; line-height:1.6}
+  footer{margin:22px 18px 0; padding-top:14px; border-top:1px solid var(--line);
+         font-size:11px; color:var(--dim); line-height:1.75}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important; animation:none !important}}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><div class="logo">📡</div>변화감지</div>
+    <div class="stamp" id="stamp"></div>
+  </div>
+  <div class="disc">
+    이 앱은 정보 정리를 목적으로 하며, 투자 판단과 그 결과의 책임은 본인에게 있습니다.
+  </div>
+  <div class="screen" id="app"></div>
+  <footer>
+    공시 = 금융감독원 DART · 주가 = 야후 파이낸스 · 뉴스 제목 = 구글 뉴스<br>
+    호재·악재는 공시에서 뽑은 신호를 정해진 표로 계산한 결과이며, 사람의 의견이 아닙니다.
+  </footer>
+</div>
+
+<script>
+const DATA = {"generated": "2026-08-26 08:41", "lookback": 60, "stocks": [{"name": "삼성전자", "code": "005930", "price": 257000.0, "pct": 0.0, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "엔비디아, '그록 3 LPX' 대량 양산 돌입…삼성전자·전기 수혜 - 지디넷코리아", "link": "https://news.google.com/rss/articles/CBMiVkFVX3lxTE9uenBGbmZLM3FPejdoeHAzbTJKSEtYNHhPNmhNRUVERlFkRUVRZjBNR0REZk5Hek9TS3pFcTBhSlJLaUZIcXUzMS13c1Bfa0diNVB3cThB?oc=5"}, {"title": "‘땡큐 엔비디아’…삼성 파운드리, 그록3 확대에 4나노 물량↑ - v.daum.net", "link": "https://news.google.com/rss/articles/CBMiT0FVX3lxTFBjbnA0dHpXcVpiVWlTOWxUeVZoNXJOamJpLUozRFdUam5vREVmUkx1cVp6ZkFTTjNRNnZScFFVMGYzZHhXYW82S18yNFUwOU0?oc=5"}, {"title": "그록3 수율 2~3배 뛰었다…삼성파운드리, 4나노 경쟁력 입증 - 서울경제", "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTFBXdU1US1pFZWM1am1ldnhuNC1iUGlNSVFPWDRzUG5kZUNKUnVlbE1fTDMyYWNWSlFubFVJNGhPZGNUV1VDMzRtR09oYmlkTWFmN0E?oc=5"}, {"title": "삼성전자 사내주택대출 다음달부터 풀린다…3중규제 화성 동탄도 '들썩' - 연합인포맥스", "link": "https://news.google.com/rss/articles/CBMicEFVX3lxTFBRNTFMdkJxaGVnNVBpSWxWNFllSXFEQ2N0R2I3U1FsQnVtVE5Ca1NCcWhWNF9jcTByaVFMVDBLOEtMMVVCaHI3cmtXTlZ3VVo3WXJXdmxEeXdZLW40YXR1dUZNVnJyeUZnWGFXTFNiUHA?oc=5"}], "tone": {"pos": 1, "neg": 0, "neu": 4, "total": 5, "skipped": 0}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 52.2, "unit": "%", "target": 15, "op": ">=", "pass": true, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": 12.4, "unit": "%", "target": 3.75, "op": ">=", "pass": true, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 31.1, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚에 기대지 않는가"}], "passed": 3, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": 56.4, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 28.1, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 31.1, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚 적은 회사인가"}], "passed": 3, "total": 3}], "temp": 55, "temp_prev": 60, "temp_at": "2026-08-26", "temp_n": 5, "temp_skipped": 0, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 171499470000000, "prev": 133873444000000, "pct": 28.105668216020497, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익", "cur": 89492412000000, "prev": 57232797000000, "pct": 56.365609739464595, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "당기순이익", "cur": 71624461000000, "prev": 47225272000000, "pct": 51.66553408098952, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익률", "cur": 52.182325694650835, "prev": 42.751419019294076, "pct": 9.43090667535676, "kind": "ratio", "tag": "good", "tag_text": "호재"}, {"name": "부채비율", "cur": 31.10095471631653, "prev": 30.146482223911864, "pct": 0.9544724924046655, "kind": "ratio", "tag": "neu", "tag_text": "중립"}], "metrics": {"영업이익률": 52.182325694650835, "부채비율": 31.10095471631653, "분기ROE": 12.363760518303513, "매출증감": 28.105668216020497, "영업이익증감": 56.365609739464595}}, "events": [{"rcept_no": "20260730800077", "date": "20260730", "cat": "📊 실적", "title": "연결재무제표기준영업(잠정)실적(공정공시)", "score": 100, "repeat": 1, "judgment": "호재", "reason": "실적개선 — 매출이나 영업이익이 늘었습니다", "mixed": false, "signals": [{"basis": "실적개선", "weight": 3, "fact": "2분기 영업이익 894,924억원으로 전기 572,328억원 대비 56.37% 증가"}], "lines": ["2분기 매출액 1,714,995억원(전기 대비 28.11% 증가), 영업이익 894,924억원(전기 대비 56.37% 증가)", "반기 누계 기준 매출액 3,053,729억원, 영업이익 1,467,252억원으로 전년 동기 대비 각각 98.67%, 1,191.45% 증가", "당기순이익 716,245억원(2분기), 지배기업 소유주지분 순이익 712,695억원으로 전기 대비 각각 51.67%, 51.31% 증가"], "numbers": ["2분기 매출액: 1,714,995억원", "2분기 영업이익: 894,924억원", "2분기 당기순이익: 716,245억원", "반기 누계 매출액: 3,053,729억원", "반기 누계 영업이익: 1,467,252억원"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260730800077"}]}, {"name": "에코프로", "code": "086520", "price": 85200.0, "pct": -3.0716723549488054, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "에코프로비엠, 헝가리 공장 생산 라인 개조 돌입…“유럽향 전기차에 소재 공급” - 문화일보", "link": "https://news.google.com/rss/articles/CBMiUEFVX3lxTE51UVVEVXNPR0V1U2NFZTBBTGNrRFlsMXFGTWZmRjRWaGRnODg3VU5PLU5sUWFZejJMcHU1THhaV0xNSFE4VmlTNm5wZDlJZ0dT?oc=5"}, {"title": "에코프로비엠(247540) - 매일경제 마켓", "link": "https://news.google.com/rss/articles/CBMilwFBVV95cUxNU0FNektxU0wtc1VaSUgyTWMtQzdrRnpDdUx6Zm9XaEhCN1dNX2JYYlcwVTJzbWljdWczVWx3c1hla0RWNzJDM2RzQUJzTmhFQTVrUGNvMXdHb05mbTdSYl9MSHV5Ql9GWmFNOWRqQmU2azcwdzNSTDRGNjVpb3Rxcy1maGRGc1h2MzgzdjFYaTItUmw3TXhJ?oc=5"}, {"title": "나신평, 에코프로 신용등급 전망 '부정적' 하향 - 뉴시스", "link": "https://news.google.com/rss/articles/CBMiYEFVX3lxTE11RTgwTVgtWW9pMHZKX3NtWnNIRktDUUFCdkZ2elhPcDhXSDhPOWFWM3NkRWx2VUFCV2NTRUxLMjVTTXFvZ1lSSXdkREdNcTIzNzNFU2F0YXpvbmtiM0xOddIBeEFVX3lxTFBSTkpxUnNTQzVvTmRWNjlXUERzb1JiX3NuLTZVeU1WaUI2eGFKRTNsd2szcklFM3NzdmdwNk5iS2F1aldyb0JpbDhCcVJQMjIyeDNUZkdjT2xyeG13ckJEUnBhTlBUczVLTV9FTWk3OHdYb0QzZWFKeQ?oc=5"}, {"title": "리베스트, 에코프로비엠과 '차세대 배터리' 기술교류 - 머니투데이 - 머니투데이", "link": "https://news.google.com/rss/articles/CBMiakFVX3lxTE5FX0lObWJUTjc2VWNnVDV2QkZueEprZmJweEZFQmtyaGVaWUFzTmltVlE3Sk9XcDNGRFdCamloRXMzT0E2UHB1RXBZREpIbWZ2NFdyQ2xKMmNfMTZtV1BDc2toMEV4emRsV3fSAW9BVV95cUxPcjhaOUNTZ3V6emVreEhRU3V1cE9SdlFzdDdhY2NHNkt0MU5VM25uSnVULWRtbHIwcUNEME9yeURKMHFvRk5HYU5hNnRsNFh2RWlCUS1OSUN3QnRBdEtmYTJ4a2dTT2NlNG43emNNMTQ?oc=5"}], "tone": {"pos": 0, "neg": 1, "neu": 4, "total": 5, "skipped": 0}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 4.1, "unit": "%", "target": 15, "op": ">=", "pass": false, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": 1.0, "unit": "%", "target": 3.75, "op": ">=", "pass": false, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 124.5, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚에 기대지 않는가"}], "passed": 0, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": -40.4, "unit": "%p", "target": 0, "op": ">=", "pass": false, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 0.4, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 124.5, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚 적은 회사인가"}], "passed": 1, "total": 3}], "temp": 45, "temp_prev": 55, "temp_at": "2026-08-26", "temp_n": 5, "temp_skipped": 0, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 821509401406, "prev": 818255816379, "pct": 0.39762443014435034, "kind": "money", "tag": "neu", "tag_text": "중립"}, {"name": "영업이익", "cur": 33581902240, "prev": 56386142915, "pct": -40.44298740095867, "kind": "money", "tag": "bad", "tag_text": "악재"}, {"name": "당기순이익", "cur": 51795093932, "prev": 236527315650, "pct": -78.10185525943925, "kind": "money", "tag": "bad", "tag_text": "악재"}, {"name": "영업이익률", "cur": 4.087829327640696, "prev": 6.891016450640547, "pct": -2.8031871229998506, "kind": "ratio", "tag": "bad", "tag_text": "악재"}, {"name": "부채비율", "cur": 124.54822235223821, "prev": 119.97571245714427, "pct": 4.572509895093944, "kind": "ratio", "tag": "bad", "tag_text": "악재"}], "metrics": {"영업이익률": 4.087829327640696, "부채비율": 124.54822235223821, "분기ROE": 1.016739747989779, "매출증감": 0.39762443014435034, "영업이익증감": -40.44298740095867}}, "events": [{"rcept_no": "20260804900253", "date": "20260804", "cat": "📊 실적", "title": "연결재무제표기준영업(잠정)실적(공정공시)", "score": 100, "repeat": 1, "judgment": "악재", "reason": "실적악화 — 매출이나 영업이익이 줄었습니다", "mixed": false, "signals": [{"basis": "실적악화", "weight": -3, "fact": "영업이익이 전기 56,386백만원에서 당기 32,900백만원으로 41.7% 감소"}], "lines": ["2분기 영업이익이 전기 대비 41.7% 감소하며 실적 부진", "매출액은 전기 대비 0.3% 소폭 증가했으나 영업이익은 크게 하락", "누적 기준으로는 영업이익이 전년 동기 대비 407.3% 증가한 상태"], "numbers": ["2분기 매출액: 820,814백만원(8,208억원)", "2분기 영업이익: 32,900백만원 (전기 대비 -41.7%)", "반기 누적 영업이익: 89,286백만원(893억원)"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260804900253"}]}, {"name": "카카오", "code": "035720", "price": 36050.0, "pct": 0.6983240223463687, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "네이버는 수직으로, 카카오는 수평으로…엇갈린 ‘AI 승부수’, 뜯어보니 - 경향신문", "link": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE1WQkY4UFNiT3Y1UXRqY2VTUl9BUXkxUlpBTVpzRDNZQnpuY3hSY21jOWROX013V0J0eGdHR09DNTdMVmFVUXUtUXBGNk1RMXVscFR2SkRVaUUtQdIBX0FVX3lxTE5NWkpmXzdlVGJjckFUTm1YVnd6dFlxcGRZTFd4UUd6VDk0ekRWZFczcWl0N3NXbWh3MkR0amdvTkZGaFk3LU14RXpqUUZIbFdTRjFXdjFOZGFfMVZOUU13?oc=5"}, {"title": "\"네이버·카카오 팔더니…\" 10억 이상 부자들, '이 종목' 샀다 - 마켓인", "link": "https://news.google.com/rss/articles/CBMic0FVX3lxTFBkalBhcC1JUWtiT3AtNVZCVzB1bnR3STk2eWFqb2QwaVFyMlU1ai1HUnN0YmZKUmpqeGx1T1VKTnVwY1NqcEQtdjVockgwU0ZzRnh5Smp5a2g4dmZ5czNFT1JsTGk1dWFMbVlDYm9YaEU2WE0?oc=5"}, {"title": "큰손 투자지도 바뀌었다…SK하이닉스·현대차 뜨고 카카오·알테오젠 빠져 - 아주경제", "link": "https://news.google.com/rss/articles/CBMiWkFVX3lxTFBIZ0dkakhDNERVS01kcDNVVG01djZxNk50VEVyZFQ2WjZFb2IwbXZHa3FHb3VRRHpiQkJHNm1TWkRicXdkb2ZpOVloVWdkanVxbUZGQWh3d0dzQdIBWEFVX3lxTE93MEctNHpqTUxvQmR5VHcwdmdhYXZhM0NBbmpxQU1KMmlnSk1vYlVpd2lkQ2lkLUlmbExkLUR0M1NRV2I3bzVTWXpLMzdhNG82OHVNQ0h0MFc?oc=5"}, {"title": "카카오AI 첫 이사회에 전 장관·국세청장 등 합류 - v.daum.net", "link": "https://news.google.com/rss/articles/CBMiT0FVX3lxTE5oMzEzaVdHb1gtMDUtR1docGFNNzEzSzZEYjV2UHJaVFJkaGhPcV9vWnFtb3E2TEJqNDFzTFZIQ2xJbEF6b2VvUWRjVlRJQk0?oc=5"}], "tone": {"pos": 0, "neg": 0, "neu": 5, "total": 5, "skipped": 0}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 13.2, "unit": "%", "target": 15, "op": ">=", "pass": false, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": 0.1, "unit": "%", "target": 3.75, "op": ">=", "pass": false, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 83.6, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚에 기대지 않는가"}], "passed": 1, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": 31.0, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 8.1, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 83.6, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚 적은 회사인가"}], "passed": 3, "total": 3}], "temp": 50, "temp_prev": 56, "temp_at": "2026-08-26", "temp_n": 5, "temp_skipped": 0, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 2098456124429, "prev": 1942077123047, "pct": 8.052151973071538, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익", "cur": 277016338871, "prev": 211397661586, "pct": 31.040398835398307, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "당기순이익", "cur": 17980431801, "prev": 226836078738, "pct": -92.07338096257264, "kind": "money", "tag": "bad", "tag_text": "악재"}, {"name": "영업이익률", "cur": 13.200959297939932, "prev": 10.885132164799408, "pct": 2.315827133140523, "kind": "ratio", "tag": "good", "tag_text": "호재"}, {"name": "부채비율", "cur": 83.58825964388495, "prev": 86.78243175135279, "pct": -3.1941721074678355, "kind": "ratio", "tag": "good", "tag_text": "호재"}], "metrics": {"영업이익률": 13.200959297939932, "부채비율": 83.58825964388495, "분기ROE": 0.11928583060942352, "매출증감": 8.052151973071538, "영업이익증감": 31.040398835398307}}, "events": [{"rcept_no": "20260806800011", "date": "20260806", "cat": "📊 실적", "title": "연결재무제표기준영업(잠정)실적(공정공시)", "score": 100, "repeat": 1, "judgment": "호재", "reason": "실적개선 — 매출이나 영업이익이 늘었습니다", "mixed": false, "signals": [{"basis": "실적개선", "weight": 3, "fact": "영업이익이 전기 119,311백만원 대비 126,197백만원으로 5.8% 증가"}], "lines": ["2분기 영업이익 126,197백만원(1,262억원)으로 전기 대비 5.8% 증가", "2분기 매출액 713,948백만원(7,139억원)으로 전기 대비 1.9% 증가", "당기순이익 318,429백만원(3,184억원)으로 전기 대비 93.7% 증가 (일회성 이익 포함)"], "numbers": ["2분기 영업이익: 126,197백만원(1,262억원)", "2분기 매출액: 713,948백만원(7,139억원)", "2분기 당기순이익: 318,429백만원(3,184억원)", "반기 누계 영업이익: 245,508백만원(2,455억원)", "반기 누계 매출액: 1,414,880백만원(1.41조원)"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260806800011"}]}, {"name": "SK하이닉스", "code": "000660", "price": 1678000.0, "pct": 0.41891083183722316, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "“자사주보다 현금”…SK하이닉스 임단협 합의안 ‘부결’, 단 25표 차 - 주간조선", "link": "https://news.google.com/rss/articles/CBMiakFVX3lxTE5PdTVLdmFSbVRxS3NBTVIxTmo4cHRTcHdTTkJHNGZ3TEdVM1I1a0kxcW9xX3BEOVFZdXotclBiclhJV0ticzFrQm1FeG5HY3RPUmIwLWhydmVrelluUFpzalBPWXY5a3dRVWfSAW5BVV95cUxPdmJIelBRSHREeW1iM05BZGxGYTlqS2Mtb05XMl9laGttSXkwdjA5TjhIV2lmN3dGaXBhUE8yV0RZVXRQXzJsbDRfSlZ0bldRZmFXQVUyN3VXODVpQmhjSk1wS3Rnb2hpZ1JTdGg0UQ?oc=5"}, {"title": "주영표 SK하이닉스 부사장 \"미래 메모리는 '쌓는것'\" - 머니투데이 - 머니투데이", "link": "https://news.google.com/rss/articles/CBMiZ0FVX3lxTFA5VTZjeUY5TEc1RmlRT3Y3ckVNOU4wZk5QZnd3Vmh4OUhqeEZfd3h6VWpfcVkweGQxQ2ljQ3NtS1hRaTZWblV2UlRfaWdkMUk3UEJmRlNadzZWbjJOUWVNbF9oVENvSGPSAWxBVV95cUxQbWtRcURZZ1pwNkZnYy1zRVI0aGJfX3hmQzhpdXBWcnVVYkFPbDZKdWhNOHMxdHJRVzNaQVVGYXhINEc3WDM4ZGRCWlZqOTBacWg1V3dqbWtNOUlOYVpfdDZkZUZ2enJsMVVELWk?oc=5"}, {"title": "삼성전자·SK하이닉스, AI 호황 올라타나…메모리 매출 280% 급증 전망 - 헤럴드경제", "link": "https://news.google.com/rss/articles/CBMiVkFVX3lxTE1NNnZfMi1MNzFZbXBFR1VRemc0VnNVTWZhY2FTdDFXM1NNRHNVVExYNXY1LVNiQ3pVbUl0cVVMTzVzbDRKTlhQT2tIb2hueVNScXZEU2pR?oc=5"}, {"title": "SK하이닉스, HBM '열과의 전쟁'…하이브리드 본딩·I-HBM으로 돌파 - v.daum.net", "link": "https://news.google.com/rss/articles/CBMiT0FVX3lxTFBwbjBoX0w5cUxWMkZmS3EteE9pTDM5ZTJ1dmNMZ08yZUVibUpoOUg4NmFPUjZWN3VVXzlXY0Q4TFl0MXlncER5VTFZZkNqRWc?oc=5"}], "tone": {"pos": 1, "neg": 1, "neu": 3, "total": 5, "skipped": 0}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 76.3, "unit": "%", "target": 15, "op": ">=", "pass": true, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": 35.8, "unit": "%", "target": 3.75, "op": ">=", "pass": true, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 32.8, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚에 기대지 않는가"}], "passed": 3, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": 61.0, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 50.9, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 32.8, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚 적은 회사인가"}], "passed": 3, "total": 3}], "temp": 45, "temp_prev": 45, "temp_at": "2026-08-26", "temp_n": 5, "temp_skipped": 0, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 79318746000000, "prev": 52576287000000, "pct": 50.86410723526369, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익", "cur": 60542608000000, "prev": 37610283000000, "pct": 60.9735507706762, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "당기순이익", "cur": 93922593000000, "prev": 40345909000000, "pct": 132.793349630566, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익률", "cur": 76.32824654086185, "prev": 71.53468825213922, "pct": 4.793558288722636, "kind": "ratio", "tag": "good", "tag_text": "호재"}, {"name": "부채비율", "cur": 32.80213451105789, "prev": 35.55725542650165, "pct": -2.7551209154437544, "kind": "ratio", "tag": "good", "tag_text": "호재"}], "metrics": {"영업이익률": 76.32824654086185, "부채비율": 32.80213451105789, "분기ROE": 35.75371687921852, "매출증감": 50.86410723526369, "영업이익증감": 60.9735507706762}}, "events": [{"rcept_no": "20260729800013", "date": "20260729", "cat": "📊 실적", "title": "연결재무제표기준영업(잠정)실적(공정공시)", "score": 100, "repeat": 1, "judgment": "호재", "reason": "실적개선 — 매출이나 영업이익이 늘었습니다", "mixed": false, "signals": [{"basis": "실적개선", "weight": 3, "fact": "영업이익이 전기 37,610,283백만원에서 당기 60,542,608백만원으로 61.0% 증가"}], "lines": ["2분기 영업이익이 전기 대비 61.0% 증가하며 큰 폭의 실적 개선", "매출액도 전기 대비 50.9% 증가한 79,318,746백만원(79.32조원) 기록", "당기순이익은 전기 대비 132.8% 증가한 93,922,593백만원(93.92조원)으로 급증"], "numbers": ["영업이익: 60,542,608백만원 (전기 대비 +61.0%)", "매출액: 79,318,746백만원 (전기 대비 +50.9%)", "당기순이익: 93,922,593백만원 (전기 대비 +132.8%)"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260729800013"}]}, {"name": "현대자동차", "code": "005380", "price": 421000.0, "pct": 1.6908212560386473, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "현대자동차, 9월 대규모 신입 채용 실시 | 뉴스 | 현대자동차그룹 - Hyundai Motor Group", "link": "https://news.google.com/rss/articles/CBMingFBVV95cUxPNDZlMUtyYWNHb2RiNFgwdTVITWhPekdwUEhieXpBMDUzT1N6YUttbkx5UUtvZG1ENEMyYXpyQWNXQVU3T2NlX0VlU0VQNkNWSEJhZXJvN1R6UzEzRHQ1ZlBhUGNvWjhCaXVJV2VtRWMwMzlkUUptdklyUFVmcXY4V3ZhaVBNdU1yYUtCNjRKVFhoMDh4X29YWGFEVHJBUQ?oc=5"}, {"title": "[오늘의 IR] 현대자동차ㆍ삼양컴텍ㆍ케이엔제이 등 - 이투데이", "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTFByMTV3RFEzTGlpTy1wdGlqUzNSaHR4QUdfN2lQRHRkZjc5ZUpCaUF3OVlmazJSVldWS2laQVlBZDVIUDlvOFBQSlUzLTRtN3FmbW1uSg?oc=5"}, {"title": "현대차 성과급 400%+1270만원, 기본급 10만원↑…임금협상 잠정합의 - 한겨레", "link": "https://news.google.com/rss/articles/CBMiZEFVX3lxTFBxV1E4bW5sb2RBT2FOZnE1b21BS0kybjYyLXp1d3J0d2VDUUFYV3pzR2JfcGdmOWZJbDJMNmhIQWlUZHl6bkNDYW5YX1BaUGJPMUgwZHdlMzFfSW9lT1QtLURUR1I?oc=5"}, {"title": "현대자동차, 9월 1일부터 하반기 대규모 신입 채용 개시… 'R D·IT 등 6개 부문'(Hyundai Motor to Launch Large-Scale Recruitment on Sept. 1 for Future Growth Sectors Including SDV, AI, and Robotics) - 글로벌휴먼타임즈", "link": "https://news.google.com/rss/articles/CBMickFVX3lxTFBCdW8wNFZPeERReW4wUWhBWXNWVkVBWDc3M1pLZHdWa0tiVXVaeHNVaUV2NVdPQTZ6cjI5UFhhLWJHazExeWJpUnRHM1ZCd1pxMjVOM1dwTWpnQTFmcEw4Y0paUVBuWm9QejNvMlR2aU1Pdw?oc=5"}], "tone": {"pos": 0, "neg": 0, "neu": 3, "total": 3, "skipped": 2}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 5.8, "unit": "%", "target": 15, "op": ">=", "pass": false, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": 2.1, "unit": "%", "target": 3.75, "op": ">=", "pass": false, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 191.3, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚에 기대지 않는가"}], "passed": 0, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": 13.4, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 7.1, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 191.3, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚 적은 회사인가"}], "passed": 2, "total": 3}], "temp": 50, "temp_prev": 50, "temp_at": "2026-08-26", "temp_n": 3, "temp_skipped": 2, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 49215328000000, "prev": 45938886000000, "pct": 7.132175560373841, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익", "cur": 2850888000000, "prev": 2514686000000, "pct": 13.369541962694347, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "당기순이익", "cur": 2887962000000, "prev": 2584926000000, "pct": 11.723198265637004, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익률", "cur": 5.792683125062176, "prev": 5.4739812367239375, "pct": 0.3187018883382384, "kind": "ratio", "tag": "neu", "tag_text": "중립"}, {"name": "부채비율", "cur": 191.332538673571, "prev": 190.2848709075362, "pct": 1.047667766034806, "kind": "ratio", "tag": "bad", "tag_text": "악재"}], "metrics": {"영업이익률": 5.792683125062176, "부채비율": 191.332538673571, "분기ROE": 2.1326523525263124, "매출증감": 7.132175560373841, "영업이익증감": 13.369541962694347}}, "events": [{"rcept_no": "20260803800709", "date": "20260803", "cat": "📊 실적", "title": "영업(잠정)실적(공정공시)", "score": 100, "repeat": 4, "judgment": "중립", "reason": "정해진 절차에 따른 신고로, 새로운 정보는 아닙니다", "mixed": false, "signals": [{"basis": "형식신고", "weight": 0, "fact": "월간 판매실적 잠정치 공시로, 재무제표 수치는 미공개"}], "lines": ["월간 판매실적만 공시하는 정기 공정공시로, 90일간 4회 반복 제출되는 형식", "2026년 7월 전 세계 판매량 318,454대로 전년 동월 대비 5.1% 감소", "국내 판매 48,113대(전년 동월 대비 14.4% 감소), 해외 판매 270,341대(전년 동월 대비 3.2% 감소)"], "numbers": ["7월 전 세계 판매: 318,454대", "국내 판매: 48,113대", "해외 판매: 270,341대", "전년 동월 대비: -5.1%"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260803800709"}]}, {"name": "한화에어로스페이스", "code": "012450", "price": 1102000.0, "pct": -0.27149321266968324, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "한화에어로스페이스, 경남에 재난 복구 지원금 2억 전달 - 동아일보", "link": "https://news.google.com/rss/articles/CBMidkFVX3lxTE9wOEFrUzFPdzVSVzJ2VDg1M3BvajNCQlUwSUlVRXl2NkIxQ0RIZDNxYVVPdF96Y2d3Q1ZWV2JNQk1uY1FsTENqQy0tR2tVaFZyWnlhMXNmaXdiQTdONkN5ZVlYVzBHODVnb3dUWmJLdjRRZjRneUHSAWZBVV95cUxQeWZneTVnMWhFVm11Z1ItNzJoVDVHcGlFU2tHVWpRdi1RamxOWTI2XzhxbW12NVotM1VQUVVUNTR1TzZXSHZZblBiQVFGMzhfTV9Ibktham4wY0JhaG1QcHhCYXdsYkE?oc=5"}, {"title": "한화에어로스페이스, 경남 재난 안전망 사업 참여…2억 원 지원 - 노컷뉴스", "link": "https://news.google.com/rss/articles/CBMiUkFVX3lxTE5icE1sUDRkNFFyVXlWSTZvWDhORktSVlRCNWFMUzBTcXhFejN0SmhYdk9iekM5UmRjTEgyY1JjNE94Y0t5SjF6R1BzdWpWTmxpU3c?oc=5"}, {"title": "경남도-한화에어로스페이스 \"우주항공·방산 협력 강화\" - 뉴시스", "link": "https://news.google.com/rss/articles/CBMiYEFVX3lxTE16d0oyS0lTRVBlZGdyYmpOQkdnVFRaTGk4WHNaVHN4NTVaLTZDcEF4Q3l5bi1xbDNLNWc4Mk1kMWRFSWZEbEhNaGVEOEZTd3lJdElHM3dZU19MNXB0TkhyVdIBeEFVX3lxTE5FOTEyT0NmRkhlM0l3T2pLSU9Ubi1NWXVIY3l0UDJxOFU5YnAyOWlfRTJyY0thY0JSVkJqb0R6TF9EbFRVOXNmZHk4VHl2SzUxNmpUS0FERXJYejBMQmF2VHNkdFZ4MGZBYnptQ3V1TjV0cm5YazFyZQ?oc=5"}, {"title": "한화에어로스페이스, 미국 LNG 사업법인 '한화호라이즌 USA' 설립 - 비즈니스포스트", "link": "https://news.google.com/rss/articles/CBMic0FVX3lxTE5CLVEzR1o2aERuaWwzMlZDb0FZRUpiOTdub1FNLTNrYWRTcjJSclZOeHRWLXhsc2w2MEdFWFB1bURjdGZWSnRaa1dlOV9raUxRcGN4RFdFYnBRelU2Xy1TakMtTUpidVJwYlZ3OTU0UEhhTHc?oc=5"}], "tone": {"pos": 1, "neg": 0, "neu": 4, "total": 5, "skipped": 0}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 14.7, "unit": "%", "target": 15, "op": ">=", "pass": false, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": 5.3, "unit": "%", "target": 3.75, "op": ">=", "pass": true, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 190.3, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚에 기대지 않는가"}], "passed": 1, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": 113.7, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 61.6, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 190.3, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚 적은 회사인가"}], "passed": 2, "total": 3}], "temp": 55, "temp_prev": 62, "temp_at": "2026-08-26", "temp_n": 5, "temp_skipped": 0, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 9292863597000, "prev": 5751023496000, "pct": 61.586256836951726, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익", "cur": 1365484214000, "prev": 638892160000, "pct": 113.72686964886218, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "당기순이익", "cur": 1080545380000, "prev": 526260028000, "pct": 105.32537576652126, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익률", "cur": 14.693901398066544, "prev": 11.109190571806351, "pct": 3.584710826260192, "kind": "ratio", "tag": "good", "tag_text": "호재"}, {"name": "부채비율", "cur": 190.26843911476442, "prev": 224.88178519059497, "pct": -34.61334607583055, "kind": "ratio", "tag": "good", "tag_text": "호재"}], "metrics": {"영업이익률": 14.693901398066544, "부채비율": 190.26843911476442, "분기ROE": 5.339417670296507, "매출증감": 61.586256836951726, "영업이익증감": 113.72686964886218}}, "events": [{"rcept_no": "20260731800455", "date": "20260731", "cat": "📊 실적", "title": "연결재무제표기준영업(잠정)실적(공정공시)", "score": 100, "repeat": 1, "judgment": "호재", "reason": "실적개선 — 매출이나 영업이익이 늘었습니다", "mixed": false, "signals": [{"basis": "실적개선", "weight": 3, "fact": "영업이익이 전기 6,389억원에서 당기 13,655억원으로 113.7% 증가"}], "lines": ["2분기 영업이익이 전기 대비 113.7% 증가하며 실적 개선", "매출액도 전기 57,510억원에서 당기 92,929억원으로 61.6% 증가", "반기 누계 기준 영업이익 20,044억원으로 전년 동기 대비 44.1% 증가"], "numbers": ["2분기 매출액 92,929억원", "2분기 영업이익 13,655억원", "2분기 당기순이익 10,805억원", "반기 누계 매출액 150,439억원", "반기 누계 영업이익 20,044억원"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260731800455"}]}, {"name": "LG에너지솔루션", "code": "373220", "price": 349500.0, "pct": -3.4530386740331496, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "LG에너지솔루션(373220) - 매일경제 마켓", "link": "https://news.google.com/rss/articles/CBMilwFBVV95cUxPQXZLeEhBY1FuRVU5dzY3WmoyZjlYbjlxdU9hR2MxN3N1X3htcjBMSGRLdnZwZWZQQUkyUXFJUUN4QzdtT053ejMtdjlrMnFSRXplWDRrZF92REpXeU8xZXg5SnVrRTFBRC1IWjY3N0M2S3M5eFNjYWFvQWxZTTVKRmU2VWJudTQwTUliVFdjbzZrLWpZa2dJ?oc=5"}, {"title": "LG에너지솔루션, 압도적 북미 생산 네트워크로 성장 가속화 - 조선일보", "link": "https://news.google.com/rss/articles/CBMijgFBVV95cUxPRzgwLTY4emJjR0VrSmpsRXFlbkJKNE80TlBLREFESFE5YVVDb2hqeTdzOE5SOVVuWmdiMU5hSUMyR1NHS2dMbHJuM0puVVQyN2hBTS1MaFhic25pSHAyVXN4S3psUlNBM0xhbzA1WEliZzZZenNSQUZtbWppemlDMlBleENwV1EtR29lNHlR?oc=5"}, {"title": "트럼프 정부 배터리 '국가안보 산업'으로 재평가, LG엔솔 삼성SDI 역할 키운다 - 비즈니스포스트", "link": "https://news.google.com/rss/articles/CBMic0FVX3lxTE1HRUJLb0ZkWFByVXk5T0JMTHkweGJMRHEzeUJWN2FjT1ZzZ05lUVFoTkNCaHFuMGR4Ung4UE53RFpldFA4UFB2dEVuX3ItWWVLY2tOUkdzVWhIS3pqWnZmVmNmRkFTb1ZVU1hKX3B4UkdRTEE?oc=5"}, {"title": "'북미 대공세' 나서는 LG엔솔…ESS 생산 2배, 전기차도 달린다 - 머니투데이 - 머니투데이", "link": "https://news.google.com/rss/articles/CBMibEFVX3lxTE9zTzFuUW5yVko1LWJYU2NCVUxXdktXb28tMHVSaDdCNm1obnBmaUlwOXNzNkZnVmZkbWw2SmlHOEhmZHFJV0VqMnNTUFJWMFFyZ3FwOG8zTldNOEZBSEhPcXl0T2dva2tnd1lTbtIBckFVX3lxTE1zRVE4bFA4akZtRzdLY0Vjb3dlUUtJQUpnc2N3WXhRU0M5SFpTZk0tbXhTNEdRZDIyUFdyaC04SHlRRFBBTEd4TzgzUDF0b0hFdkphaU0tbmFIcFU1Q3hlNjY5cUlsd0V0Y1JZd1dWQTFnUQ?oc=5"}], "tone": {"pos": 1, "neg": 0, "neu": 4, "total": 5, "skipped": 0}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 1.5, "unit": "%", "target": 15, "op": ">=", "pass": false, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": -1.1, "unit": "%", "target": 3.75, "op": ">=", "pass": false, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 157.1, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚에 기대지 않는가"}], "passed": 0, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": 154.5, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 15.3, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 157.1, "unit": "%", "target": 100, "op": "<=", "pass": false, "why": "빚 적은 회사인가"}], "passed": 2, "total": 3}], "temp": 55, "temp_prev": 50, "temp_at": "2026-08-26", "temp_n": 5, "temp_skipped": 0, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 7560249000000, "prev": 6554967000000, "pct": 15.336187047165911, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익", "cur": 113302000000, "prev": -207755000000, "pct": 154.53635291569395, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "당기순이익", "cur": -328644000000, "prev": -944034000000, "pct": 65.1872707974501, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익률", "cur": 1.4986543432630328, "prev": -3.1694286180235536, "pct": 4.668082961286586, "kind": "ratio", "tag": "good", "tag_text": "호재"}, {"name": "부채비율", "cur": 157.13539274935843, "prev": 140.0216617667744, "pct": 17.11373098258403, "kind": "ratio", "tag": "bad", "tag_text": "악재"}], "metrics": {"영업이익률": 1.4986543432630328, "부채비율": 157.13539274935843, "분기ROE": -1.0851119721287046, "매출증감": 15.336187047165911, "영업이익증감": 154.53635291569395}}, "events": [{"rcept_no": "20260730800128", "date": "20260707", "cat": "📊 실적", "title": "[첨부추가]연결재무제표기준영업(잠정)실적(공정공시)", "score": 70, "repeat": 2, "judgment": "악재", "reason": "실적악화 — 매출이나 영업이익이 줄었습니다", "mixed": false, "signals": [{"basis": "실적악화", "weight": -3, "fact": "영업이익(누계실적)이 전년동기 3,375억원에서 -9,865억원으로 적자전환"}], "lines": ["2026년 7월 7일 공시한 2분기 실적을 7월 30일 정정신고한 것으로, 정정 사유는 원문에 명시되지 않음", "2분기 영업이익은 1,133억원(흑자)이나, 북미 생산 보조금 2,410억원을 제외하면 -1,277억원의 적자", "누계 기준 영업이익이 전년동기 8,668억원에서 -945억원으로 적자전환, 당기순이익도 3,172억원에서 -12,727억원으로 악화"], "numbers": ["2분기 매출액 75,602억원(전기 대비 15.3% 증가)", "2분기 영업이익 1,133억원(보조금 제외 시 -1,277억원)", "누계 영업이익 -945억원(전년동기 8,668억원 대비 적자전환)", "누계 당기순이익 -12,727억원(전년동기 3,172억원 대비 적자전환)"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260730800128"}]}, {"name": "삼성바이오로직스", "code": "207940", "price": 1585000.0, "pct": 0.7628734901462174, "market": "코스피", "priced_at": "08월 25일", "news": [{"title": "셀트리온‧삼성바이오, 온라인 관심도 선두 경쟁 - 지디넷코리아", "link": "https://news.google.com/rss/articles/CBMiVkFVX3lxTE53MGdZTXNjejhraU14QklLcXZBWEVHMi1GQkYxcW1EUlQ1M2pCZUxKTTFlb0VNbTRFOVRtT3NHVXpUVjZCMC1pX2JXM3F1bDAtUlQwY01B?oc=5"}, {"title": "제임스 최 삼성바이오 부사장 '공급망 ESG, 사업 필수 조건…지속가능 가치사슬 구축' - 데일리한국", "link": "https://news.google.com/rss/articles/CBMib0FVX3lxTE5DSDZYaUhKVUFjY1FIM1BfcXMzOWwwVGJMTEJUR19yUzJxUWRVNmdMNHAtVjZvX0labGU0Yko4Sm1tRmFOY3E3bnZELV85YjdrQkJUdWx4Y3pJZTFVMWt6cy1mejdJRkZrYkIxM3BxTdIBc0FVX3lxTFBPQ1Nia2NQMkhsZ1hpY3N2bGFaZjIzT21RLTc5bHlxVHZ0d2NnUVd1c0dQUC1IX28tblNhOElSVUtkNFR6LUcyb3A2UFNQMnIwRnF3Wkd0TXNVMGt2Rzc4WU5XZkF4RjRUalpQNGE5TnprNmc?oc=5"}, {"title": "삼성바이오로직스, 400억 이익보던 바이오펀드 '손실 전환' - 네이버 프리미엄콘텐츠", "link": "https://news.google.com/rss/articles/CBMigAFBVV95cUxOVTg3aVZNX3BZc082RnUzOHVfNGJZaFFvWE1rUXBJLWFJY1dKVXlpa3R6R1JqT3pWaGNxNDBwRXlKQ1o3TUhQUHlJR1preEk1RU4wMUx6QUVBOEVaclFKZWJMX21oYVk1RS03QjZqV0tpaU5BaVV4djZNVFFpdktibw?oc=5"}, {"title": "[삼성 바이오 신화 15년] ‘제2의 반도체’ 현실로…JY ‘도전 DNA’ 통했다 - 아시아투데이", "link": "https://news.google.com/rss/articles/CBMibkFVX3lxTE5jekkwN2VxY1l4Nm5uTkF6bkhtdUZIdzc2WjFoUmliZ1M5RDJqVW84cGxrb0pRcnRHWGNCUWlyRHdCa0FjN2RWOU00Y0F5V2VCOTd3YmROX29GaGJVQUVmV1NjeDU2dXl1Rzg3NGxB?oc=5"}], "tone": {"pos": 1, "neg": 1, "neu": 3, "total": 5, "skipped": 0}, "why": null, "investor": [{"who": "버핏", "emoji": "🎩", "src": "주주서한에서 반복해 강조한 기준", "checks": [{"label": "영업이익률", "value": 44.4, "unit": "%", "target": 15, "op": ">=", "pass": true, "why": "본업으로 두껍게 남기는가"}, {"label": "자기자본이익률", "value": 5.2, "unit": "%", "target": 3.75, "op": ">=", "pass": true, "why": "가진 돈으로 얼마나 벌었나 (분기 기준)"}, {"label": "부채비율", "value": 51.3, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚에 기대지 않는가"}], "passed": 3, "total": 3}, {"who": "린치", "emoji": "📗", "src": "『전설로 떠나는 월가의 영웅』의 기준", "checks": [{"label": "영업이익 성장", "value": 1.0, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "이익이 늘고 있는가"}, {"label": "매출 성장", "value": 5.1, "unit": "%p", "target": 0, "op": ">=", "pass": true, "why": "장사가 커지고 있는가"}, {"label": "부채비율", "value": 51.3, "unit": "%", "target": 100, "op": "<=", "pass": true, "why": "빚 적은 회사인가"}], "passed": 3, "total": 3}], "temp": 50, "temp_prev": 56, "temp_at": "2026-08-26", "temp_n": 5, "temp_skipped": 0, "fin": {"year": 2026, "quarter": 2, "basis": "직전 분기 대비", "fs": "연결", "rows": [{"name": "매출액", "cur": 1320910867803, "prev": 1257119188891, "pct": 5.074433631728705, "kind": "money", "tag": "good", "tag_text": "호재"}, {"name": "영업이익", "cur": 586443842141, "prev": 580752580824, "pct": 0.979980374589978, "kind": "money", "tag": "neu", "tag_text": "중립"}, {"name": "당기순이익", "cur": 430654182174, "prev": 469245424673, "pct": -8.224106292755614, "kind": "money", "tag": "bad", "tag_text": "악재"}, {"name": "영업이익률", "cur": 44.396927638001834, "prev": 46.19709777370639, "pct": -1.8001701357045548, "kind": "ratio", "tag": "bad", "tag_text": "악재"}, {"name": "부채비율", "cur": 51.31233336992261, "prev": 51.397807332240816, "pct": -0.08547396231820414, "kind": "ratio", "tag": "neu", "tag_text": "중립"}], "metrics": {"영업이익률": 44.396927638001834, "부채비율": 51.31233336992261, "분기ROE": 5.150181036451854, "매출증감": 5.074433631728705, "영업이익증감": 0.979980374589978}}, "events": [{"rcept_no": "20260723800003", "date": "20260723", "cat": "📊 실적", "title": "연결재무제표기준영업(잠정)실적(공정공시)", "score": 100, "repeat": 1, "judgment": "호재", "reason": "실적개선 — 매출이나 영업이익이 늘었습니다", "mixed": false, "signals": [{"basis": "실적개선", "weight": 3, "fact": "영업이익이 전기 5,808억원 대비 5,864억원으로 1.0% 증가"}], "lines": ["2분기 영업이익 5,864억원으로 전기 대비 소폭 증가, 매출액은 13,209억원으로 5.1% 성장", "반기 누계 기준 매출액 25,780억원, 영업이익 11,672억원으로 전년 동기 대비 각각 28.0%, 28.6% 증가", "당기순이익은 전기 4,692억원 대비 4,307억원으로 8.2% 감소했으나, 이는 법인세비용차감전계속사업이익 감소(-8.7%)에 따른 것"], "numbers": ["2분기 매출액 13,209억원", "2분기 영업이익 5,864억원", "반기 누계 매출액 25,780억원", "반기 누계 영업이익 11,672억원"], "link": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260723800003"}]}], "built": "2026-08-26 08:41"};
+
+function esc(s){
+  return String(s == null ? "" : s)
+    .split("&").join("&amp;").split("<").join("&lt;")
+    .split(">").join("&gt;").split('"').join("&quot;");
+}
+function won(v){
+  if (v == null) return "-";
+  const a = Math.abs(v);
+  if (a >= 1e12) return (v / 1e12).toFixed(2) + "조원";
+  if (a >= 1e8) return Math.round(v / 1e8).toLocaleString("ko-KR") + "억원";
+  return v.toLocaleString("ko-KR") + "원";
+}
+function dirClass(v){ return v > 0 ? "up" : (v < 0 ? "down" : "flat"); }
+function ymd(s){
+  return s && s.length === 8 ? s.slice(4,6) + "월 " + s.slice(6,8) + "일" : (s || "");
+}
+function tempLabel(v){
+  if (v == null) return "-";
+  if (v >= 80) return "뜨거움";
+  if (v >= 65) return "따뜻함";
+  if (v >= 45) return "미지근함";
+  if (v >= 30) return "서늘함";
+  return "차가움";
+}
+
+/* ── 히어로: 오늘 한 줄로 무슨 일이 있었는지 ── */
+function hero(d){
+  const stocks = d.stocks || [];
+  const changed = stocks.filter(function(s){ return (s.events || []).length; });
+  const evCount = stocks.reduce(function(a, s){ return a + (s.events || []).length; }, 0);
+  const bad = stocks.reduce(function(a, s){
+    return a + (s.events || []).filter(function(e){ return e.judgment === "악재"; }).length; }, 0);
+  const cooled = stocks.filter(function(s){
+    return s.temp != null && s.temp_prev != null && s.temp < s.temp_prev; }).length;
+
+  const head = changed.length
+    ? '내 종목 ' + stocks.length + '곳 중 <span class="up">' + changed.length +
+      '곳에 새 변화</span>가 있었어요'
+    : '내 종목 ' + stocks.length + '곳 모두 <span class="flat">조용했어요</span>';
+  const sub = changed.length
+    ? '챙겨볼 만한 변화가 <b>' + evCount + '건</b> 있어요. 아래에서 달라진 것만 모아 보여드릴게요.'
+    : '새로 챙겨볼 공시가 없어요. 주가와 여론만 정리해 두었어요.';
+
+  return '<div class="hero"><div class="glow"></div>' +
+    '<div class="lbl">☾ 밤사이 브리핑 · ' + esc(d.generated || "") + '</div>' +
+    '<div class="big">' + head + '</div>' +
+    '<div class="sub">' + sub + '</div>' +
+    '<div class="row">' +
+      '<div class="chip"><div class="n up">' + evCount + '</div><div class="c">새 변화</div></div>' +
+      '<div class="chip"><div class="n" style="color:var(--warn)">' + bad + '</div><div class="c">주의 신호</div></div>' +
+      '<div class="chip"><div class="n down">' + cooled + '</div><div class="c">여론 악화</div></div>' +
+    '</div></div>';
+}
+
+/* ── 오늘 왜 움직였나 ── */
+function whyBlock(s){
+  if (!s.why || !s.why.text) return "";
+  const tags = (s.why.sources || []).map(function(x){
+    return '<span class="t">' + esc(x) + '</span>'; }).join("");
+  return '<div class="why"><div class="q">💡 오늘 왜 움직였나?</div>' +
+         '<p>' + esc(s.why.text) + '</p>' +
+         '<div class="srcs">' + tags + '</div></div>';
+}
+
+/* ── 지난 분기 대비 달라진 점 ── */
+function diffBlock(f){
+  if (!f) return "";
+  const rows = f.rows.map(function(r){
+    const vals = r.kind === "ratio"
+      ? r.prev.toFixed(1) + "% → <b>" + r.cur.toFixed(1) + "%</b>"
+      : won(r.prev) + " → <b>" + won(r.cur) + "</b>";
+    return '<div class="drow">' +
+             '<div class="m">' + esc(r.name) + '</div>' +
+             '<div class="vals">' + vals + '</div>' +
+             '<div class="tag ' + r.tag + '">' + esc(r.tag_text) + '</div>' +
+           '</div>';
+  }).join("");
+  return '<div class="diff">' +
+    '<div class="dh"><b>' + f.year + '년 ' + f.quarter + '분기</b>' +
+      '<span>지난 분기 → 이번 분기</span></div>' + rows +
+    '<div class="dfoot">' + esc(f.basis) + ' · ' + esc(f.fs) +
+      ' · 정기보고서 재무제표 기준 (잠정실적 공시의 숫자와 다를 수 있습니다)</div>' +
+  '</div>';
+}
+
+/* ── 투자자 기준 대조 (추천이 아니라 대조) ── */
+function investorBlock(list){
+  if (!list || !list.length) return "";
+  return list.map(function(iv){
+    const ratio = iv.passed / iv.total;
+    const c = ratio === 1 ? "good" : (ratio >= 0.5 ? "neu" : "bad");
+    const rows = iv.checks.map(function(ch){
+      const mk = ch.pass
+        ? '<span class="mk" style="color:var(--good)">✓</span>'
+        : '<span class="mk" style="color:var(--bad)">✕</span>';
+      return '<div class="inv-row">' + mk +
+        '<div><div class="lb">' + esc(ch.label) + '</div>' +
+        '<div class="wh">' + esc(ch.why) + '</div></div>' +
+        '<div class="vl">' + ch.value + ch.unit +
+          '<small>기준 ' + (ch.op === ">=" ? "≥ " : "≤ ") + ch.target + ch.unit + '</small>' +
+        '</div></div>';
+    }).join("");
+    return '<div class="inv">' +
+      '<div class="inv-h"><span class="who">' + iv.emoji +
+        ' <b>' + esc(iv.who) + '</b> 기준으로 보면' +
+        '</span><span class="cnt tag ' + c + '">' + iv.passed + ' / ' + iv.total + ' 충족</span></div>' +
+      '<div class="inv-h" style="border-bottom:1px solid var(--line);padding-top:7px;padding-bottom:7px">' +
+        '<span class="src">' + esc(iv.src) + '</span></div>' +
+      rows +
+      '<div class="inv-foot">이번 분기 숫자만 대조한 결과입니다. 원래 이 기준들은 ' +
+      '여러 해에 걸쳐 꾸준한지를 보는 것이라, 한 분기로 회사를 판단할 수는 없습니다. ' +
+      '매수·매도 의견이 아닙니다.</div>' +
+    '</div>';
+  }).join("");
+}
+
+/* ── 여론 온도계 ── */
+function sentiBlock(s){
+  if (s.temp == null) return "";
+  const v = s.temp, prev = s.temp_prev;
+  let delta = '<span class="delta flat">어제 기록 없음</span>';
+  if (prev != null){
+    const d = v - prev;
+    delta = d > 0
+      ? '<span class="delta up">어제보다 ' + d + '도 올랐어요</span>'
+      : (d < 0
+        ? '<span class="delta down">어제보다 ' + Math.abs(d) + '도 떨어졌어요</span>'
+        : '<span class="delta flat">어제와 같아요</span>');
+  }
+  const ghost = prev == null ? ""
+    : '<div class="ghost" style="left:' + prev + '%" title="어제 ' + prev + '도"></div>';
+  const note = s.temp_n
+    ? '기사 제목 ' + s.temp_n + '건 기준' +
+      (s.temp_skipped ? ' · 홍보성 ' + s.temp_skipped + '건 제외' : '') +
+      (prev != null ? ' · 흰 선이 어제 위치' : '')
+    : "";
+  return '<div class="senti">' +
+    '<div class="sh"><span>🌡 여론 온도 <b>' + v + '도</b> · ' + tempLabel(v) + '</span>' +
+      delta + '</div>' +
+    '<div class="bar">' + ghost + '<div class="knob" style="left:' + v + '%"></div></div>' +
+    '<div class="scale"><span>1도 차가움</span><span>50 중립</span><span>100도 뜨거움</span></div>' +
+    (note ? '<div class="note">' + note + '</div>' : "") +
+  '</div>';
+}
+
+/* ── 공시 타임라인 ── */
+function timeline(events){
+  if (!events || !events.length){
+    return '<div class="empty">최근 60일간 챙겨볼 만한 공시가 없었어요.</div>';
+  }
+  const dotOf = {"호재":"g", "악재":"b", "중립":"n", "확인필요":"w"};
+  return '<div class="tl">' + events.map(function(e, i){
+    const last = i === events.length - 1;
+    const sev = e.score >= 85 ? "상" : (e.score >= 75 ? "중" : "하");
+    const cls = {"호재":"good", "악재":"bad", "중립":"neu"}[e.judgment] || "hot";
+    const sigs = (e.signals || []).map(function(g){
+      const mk = g.weight < 0 ? "▼" : (g.weight > 0 ? "▲" : "―");
+      const c = g.weight < 0 ? "down" : (g.weight > 0 ? "up" : "flat");
+      return '<div class="sig"><div class="mk ' + c + '">' + mk + '</div>' +
+             '<div><div class="bs">' + esc(g.basis) + '</div>' +
+             '<div class="ft">' + esc(g.fact) + '</div></div></div>';
+    }).join("");
+    const why = sigs
+      ? '<div class="ev-why"><div class="h">이렇게 본 이유</div>' + sigs + '</div>' : "";
+    const lines = (e.lines || []).length
+      ? '<ul>' + e.lines.map(function(l){ return "<li>" + esc(l) + "</li>"; }).join("") + '</ul>'
+      : "";
+    return '<div class="item">' +
+      '<div class="line"><div class="d ' + (dotOf[e.judgment] || "w") + '"></div>' +
+        (last ? "" : '<div class="bar2"></div>') + '</div>' +
+      '<div class="ct">' +
+        '<div class="dt">' + ymd(e.date) +
+          '<span class="bdg ' + cls + '">' + esc(e.judgment) + '</span>' +
+          '<span class="bdg neu">중요도 ' + sev + '</span>' +
+          (e.repeat > 1 ? '<span class="bdg hot">' + e.repeat + '회 반복</span>' : "") +
+        '</div>' +
+        '<div class="tx">' + esc(e.title) + '</div>' +
+        lines + why +
+        '<a href="' + esc(e.link) + '" target="_blank" rel="noopener">DART 원문 보기 →</a>' +
+      '</div></div>';
+  }).join("") + '</div>';
+}
+
+/* ── 접이식 구역 ── */
+function sect(title, inner, hint, open){
+  if (!inner) return "";
+  return '<details class="sect"' + (open ? " open" : "") + '>' +
+    '<summary><span class="chev">&#9656;</span>' + esc(title) +
+      (hint ? '<span class="hint">' + esc(hint) + '</span>' : "") + '</summary>' +
+    '<div class="sect-b">' + inner + '</div></details>';
+}
+
+/* ── 종목 카드 ── */
+function stockCard(s){
+  const cls = s.pct == null ? "flat" : dirClass(s.pct);
+  const price = s.pct == null ? ""
+    : '<div class="price"><div class="p">' + s.price.toLocaleString("ko-KR") + '</div>' +
+      '<div class="ch ' + cls + '">' + (s.pct > 0 ? "+" : "") + s.pct.toFixed(2) + '%</div></div>';
+
+  const badges = [];
+  (s.events || []).slice(0, 2).forEach(function(e){
+    const c = {"호재":"good", "악재":"bad", "중립":"neu"}[e.judgment] || "hot";
+    const b = (e.signals || [])[0];
+    badges.push('<span class="bdg ' + c + '">' + esc(b ? b.basis : e.judgment) + '</span>');
+  });
+  if (s.temp != null && s.temp_prev != null && s.temp < s.temp_prev)
+    badges.push('<span class="bdg hot">여론 악화</span>');
+  if (s.pct != null && Math.abs(s.pct) >= 3)
+    badges.push('<span class="bdg hot">주가 급변</span>');
+
+  const first = (s.events || [])[0];
+  const oneline = first
+    ? '<div class="oneline"><b>' + esc(first.title) + '</b> — ' + esc(first.reason) + '</div>'
+    : '<div class="oneline">최근 챙겨볼 만한 공시는 없었어요.</div>';
+
+  // ── 접힌 상태에서 보이는 부분 ──
+  const head =
+    '<div class="srow"><div><span class="sname">' + esc(s.name) + '</span>' +
+      '<span class="sticker">' + esc(s.code) +
+      (s.market ? " · " + esc(s.market) : "") + '</span></div>' + price + '</div>' +
+    (badges.length ? '<div class="badges">' + badges.join("") + '</div>' : "") +
+    oneline +
+    '<div class="more"><span class="chev">&#9656;</span>눌러서 자세히 보기</div>';
+
+  // ── 펼쳤을 때 나오는 부분 ──
+  const news = (s.news || []).length
+    ? '<div class="news">' + s.news.map(function(n){
+        return n.link
+          ? '<a href="' + esc(n.link) + '" target="_blank" rel="noopener">' + esc(n.title) + '</a>'
+          : '<a>' + esc(n.title) + '</a>';
+      }).join("") + '</div>'
+    : "";
+
+  const finHint = s.fin ? s.fin.year + "년 " + s.fin.quarter + "분기" : "";
+  const invHint = (s.investor || []).map(function(iv){
+    return iv.who + " " + iv.passed + "/" + iv.total; }).join(" · ");
+  const tempHint = s.temp != null ? s.temp + "도 " + tempLabel(s.temp) : "";
+  const evHint = (s.events || []).length ? (s.events.length + "건") : "없음";
+
+  const body =
+    whyBlock(s) +
+    sect("지난 분기 대비 달라진 점", diffBlock(s.fin), finHint, true) +
+    sect("유명 투자자 기준으로 보면", investorBlock(s.investor), invHint) +
+    sect("여론 온도", sentiBlock(s), tempHint) +
+    sect("공시 타임라인", timeline(s.events), evHint) +
+    sect("관련 뉴스", news, (s.news || []).length ? s.news.length + "건" : "");
+
+  return '<details class="stock"><summary class="card">' + head + '</summary>' +
+         '<div class="stock-b">' + body + '</div></details>';
+}
+
+(function render(){
+  const app = document.getElementById("app");
+  if (!DATA){ app.innerHTML = '<div class="empty">데이터가 없습니다.</div>'; return; }
+  document.getElementById("stamp").textContent =
+    (DATA.built || DATA.generated || "") + " 기준";
+
+  let html = hero(DATA);
+  html += '<h2 class="sec">📌 관심종목 <span class="pill">눌러서 펼치기</span></h2>';
+  (DATA.stocks || []).forEach(function(s){ html += stockCard(s); });
+  app.innerHTML = html;
+})();
+</script>
